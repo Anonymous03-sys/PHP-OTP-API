@@ -1,17 +1,13 @@
-
 <?php
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-	exit(0);
-}
-
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
 
 header('Content-Type: application/json');
 
-$storageFile = 'otp_storage.json';
+$storageFile = sys_get_temp_dir() . '/otp_storage.json';
 $storage = file_exists($storageFile) ? json_decode(file_get_contents($storageFile), true) : [];
 
 $email = $_GET['email'] ?? '';
