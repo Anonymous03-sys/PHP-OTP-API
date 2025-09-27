@@ -38,7 +38,7 @@ try {
         " text/html",
         "
     <div style='font-family: Arial, sans-serif; color: #333;'>
-        <h2 style='color: #4CAF50;'>Codetology OTP Verification</h2>
+        <h2 style='color: #0aabed;'>Codetology OTP Verification</h2>
         <p>Hello,</p>
         <p>We received a request to log in to your Codetology account associated with this email address.</p>
         <p>Your One-Time Password (OTP) is:</p>
