@@ -17,7 +17,9 @@ RUN apt-get update && apt-get install -y \
     zip \
     curl \
     openssl \
+    ca-certificates \
     && docker-php-ext-install mysqli pdo_mysql
+
 
 # Install Composer
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
