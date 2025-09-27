@@ -1,26 +1,26 @@
-# Use the official PHP image with Apache
 FROM php:8.2-apache
 
-# Enable required PHP extensions
-RUN docker-php-ext-install mysqli json
+# Install dependencies for extensions
+RUN apt-get update && apt-get install -y \
+    libzip-dev \
+    libonig-dev \
+    libxml2-dev \
+    unzip \
+    git \
+    zip \
+    && docker-php-ext-install mysqli json
 
-# Enable mod_rewrite for Apache
+# Enable mod_rewrite
 RUN a2enmod rewrite
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy your PHP app into the container
-COPY . /var/www/html
+# Copy PHP files
+COPY . .
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Install Composer and dependencies
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN composer install --no-dev --optimize-autoloader
 
-# Install PHPMailer via Composer
-RUN composer install
-
-# Expose port 80
 EXPOSE 80
-
-# Start Apache in the foreground
-CMD ["apache2-foreground"]
