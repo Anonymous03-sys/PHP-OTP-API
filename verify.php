@@ -1,31 +1,44 @@
+
 <?php
-session_start();
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+	exit(0);
+}
+
+
 header('Content-Type: application/json');
+
+$storageFile = 'otp_storage.json';
+$storage = file_exists($storageFile) ? json_decode(file_get_contents($storageFile), true) : [];
 
 $email = $_GET['email'] ?? '';
 $enteredOtp = $_GET['otp'] ?? '';
 
 if (!$email || !$enteredOtp) {
-	echo json_encode(['success' => false, 'message' => 'Email and OTP required']);
+	echo json_encode(['success' => false, 'message' => 'Email or OTP missing']);
 	exit;
 }
 
-$otpData = $_SESSION['otp_data'][$email] ?? null;
-if (!$otpData) {
-	echo json_encode(['success' => false, 'message' => 'No OTP found for this email']);
+if (!isset($storage[$email])) {
+	echo json_encode(['success' => false, 'message' => 'No OTP found']);
 	exit;
 }
 
-// Check expiry
-if (time() > $otpData['expiry']) {
-	unset($_SESSION['otp_data'][$email]);
+$otpData = $storage[$email];
+
+if ($otpData['expiry'] < time()) {
+	unset($storage[$email]);
+	file_put_contents($storageFile, json_encode($storage));
 	echo json_encode(['success' => false, 'message' => 'OTP expired']);
 	exit;
 }
 
-// Check OTP
-if ($enteredOtp == $otpData['otp']) {
-	unset($_SESSION['otp_data'][$email]);
+if ($otpData['otp'] == $enteredOtp) {
+	unset($storage[$email]);
+	file_put_contents($storageFile, json_encode($storage));
 	echo json_encode(['success' => true, 'message' => 'OTP verified']);
 } else {
 	echo json_encode(['success' => false, 'message' => 'Invalid OTP']);
