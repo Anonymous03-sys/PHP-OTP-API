@@ -4,7 +4,7 @@ FROM php:8.2-apache
 # Set working directory
 WORKDIR /var/www/html
 
-# Enable Apache mod_rewrite (optional, good for routing)
+# Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
 # Install system dependencies for PHP extensions and Composer
@@ -19,15 +19,17 @@ RUN apt-get update && apt-get install -y \
     openssl \
     && docker-php-ext-install mysqli pdo_mysql
 
-
 # Install Composer
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-# Copy PHP app files
-COPY . .
+# Copy only composer files first
+COPY composer.json composer.lock ./
 
-# Install PHPMailer via Composer
+# Install dependencies (PHPMailer included in composer.json)
 RUN composer install --no-dev --optimize-autoloader
+
+# Now copy the rest of the app files
+COPY . .
 
 # Expose port 80
 EXPOSE 80
