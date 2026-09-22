@@ -7,7 +7,10 @@ require_once dirname(__DIR__, 2) . '/src/account-recovery.php';
 require_once dirname(__DIR__, 2) . '/src/challenge-engine.php';
 require_once dirname(__DIR__, 2) . '/src/recovery-mailer.php';
 
+$requestStartedAt = microtime(true);
+
 otp_api_require_method('POST');
+otp_api_require_json_content_type();
 
 $payload = otp_api_read_json_body();
 $portal = is_string($payload['portal'] ?? null)
@@ -49,7 +52,7 @@ try {
         $portal,
         $normalizedIdentifier
     );
-} catch (RuntimeException) {
+} catch (Throwable) {
     otp_api_json_response(503, [
         'success' => false,
         'code' => 'RECOVERY_SERVICE_UNAVAILABLE',
@@ -58,11 +61,14 @@ try {
 }
 
 if (($challenge['status'] ?? '') === 'RATE_LIMITED') {
+    $retryAfter = (int) ($challenge['retry_after'] ?? 900);
+    header('Retry-After: ' . max(1, $retryAfter));
+
     otp_api_json_response(429, [
         'success' => false,
         'code' => 'RECOVERY_RATE_LIMITED',
         'message' => 'Too many recovery requests were made. Please wait before trying again.',
-        'retryAfter' => (int) ($challenge['retry_after'] ?? 900),
+        'retryAfter' => $retryAfter,
     ]);
 }
 
@@ -94,6 +100,10 @@ if (
             'delivery_status_code' => (int) (
                 $delivery['status_code'] ?? 0
             ),
+            'delivery_reason' => (string) (
+                $delivery['reason'] ?? 'UNKNOWN'
+            ),
+            'delivery_ready' => (bool) ($delivery['success'] ?? false),
             'delivery_updated_at_epoch' => time(),
             'delivered_at_epoch' => $delivery['success']
                 ? time()
@@ -104,6 +114,8 @@ if (
         // operational metadata and must never expose provider details.
     }
 }
+
+otp_api_pad_response_time($requestStartedAt);
 
 otp_api_json_response(202, [
     'success' => true,
