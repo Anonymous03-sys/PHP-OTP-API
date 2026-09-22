@@ -132,7 +132,7 @@ function otp_api_firebase_access_token(): string
         'https://oauth2.googleapis.com/token',
         ['Content-Type: application/x-www-form-urlencoded'],
         http_build_query([
-            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'grant_type' => 'urn:ietf:params:oauth2:grant-type:jwt-bearer',
             'assertion' => $assertion,
         ], '', '&', PHP_QUERY_RFC3986)
     );
@@ -171,15 +171,54 @@ function otp_api_firebase_access_token(): string
     return $cachedToken;
 }
 
-function otp_api_firestore_run_query(array $structuredQuery): array
+function otp_api_firestore_documents_base_url(): string
 {
     $serviceAccount = otp_api_load_firebase_service_account();
     $projectId = rawurlencode((string) $serviceAccount['project_id']);
 
-    $url = sprintf(
-        'https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents:runQuery',
+    return sprintf(
+        'https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents',
         $projectId
     );
+}
+
+function otp_api_firestore_authorized_headers(): array
+{
+    return [
+        'Authorization: Bearer ' . otp_api_firebase_access_token(),
+        'Content-Type: application/json',
+    ];
+}
+
+function otp_api_firestore_decode_json_response(
+    array $response,
+    string $failureMessage
+): array {
+    if ($response['status'] < 200 || $response['status'] >= 300) {
+        throw new RuntimeException($failureMessage);
+    }
+
+    try {
+        $payload = json_decode(
+            $response['body'],
+            true,
+            512,
+            JSON_THROW_ON_ERROR
+        );
+    } catch (JsonException) {
+        throw new RuntimeException($failureMessage);
+    }
+
+    if (!is_array($payload)) {
+        throw new RuntimeException($failureMessage);
+    }
+
+    return $payload;
+}
+
+function otp_api_firestore_run_query(array $structuredQuery): array
+{
+    $url = otp_api_firestore_documents_base_url() . ':runQuery';
 
     $body = json_encode(
         ['structuredQuery' => $structuredQuery],
@@ -193,37 +232,14 @@ function otp_api_firestore_run_query(array $structuredQuery): array
     $response = otp_api_http_request(
         'POST',
         $url,
-        [
-            'Authorization: Bearer ' . otp_api_firebase_access_token(),
-            'Content-Type: application/json',
-        ],
+        otp_api_firestore_authorized_headers(),
         $body
     );
 
-    if ($response['status'] < 200 || $response['status'] >= 300) {
-        throw new RuntimeException('Firestore account lookup failed.');
-    }
-
-    try {
-        $payload = json_decode(
-            $response['body'],
-            true,
-            512,
-            JSON_THROW_ON_ERROR
-        );
-    } catch (JsonException) {
-        throw new RuntimeException(
-            'Firestore account lookup returned an invalid response.'
-        );
-    }
-
-    if (!is_array($payload)) {
-        throw new RuntimeException(
-            'Firestore account lookup returned an invalid response.'
-        );
-    }
-
-    return $payload;
+    return otp_api_firestore_decode_json_response(
+        $response,
+        'Firestore query failed.'
+    );
 }
 
 function otp_api_firestore_find_single_document(
@@ -231,18 +247,38 @@ function otp_api_firestore_find_single_document(
     string $identifierField,
     string $identifierValue
 ): ?array {
+    $results = otp_api_firestore_query_equal(
+        $collection,
+        $identifierField,
+        $identifierValue,
+        2
+    );
+
+    if (count($results) !== 1) {
+        return null;
+    }
+
+    return $results[0];
+}
+
+function otp_api_firestore_query_equal(
+    string $collection,
+    string $field,
+    string $value,
+    int $limit = 50
+): array {
     $results = otp_api_firestore_run_query([
         'from' => [
             ['collectionId' => $collection],
         ],
         'where' => [
             'fieldFilter' => [
-                'field' => ['fieldPath' => $identifierField],
+                'field' => ['fieldPath' => $field],
                 'op' => 'EQUAL',
-                'value' => ['stringValue' => $identifierValue],
+                'value' => ['stringValue' => $value],
             ],
         ],
-        'limit' => 2,
+        'limit' => max(1, min(100, $limit)),
     ]);
 
     $documents = [];
@@ -257,11 +293,151 @@ function otp_api_firestore_find_single_document(
         }
     }
 
-    if (count($documents) !== 1) {
+    return $documents;
+}
+
+function otp_api_firestore_get_document(
+    string $collection,
+    string $documentId
+): ?array {
+    $url = otp_api_firestore_documents_base_url()
+        . '/'
+        . rawurlencode($collection)
+        . '/'
+        . rawurlencode($documentId);
+
+    $response = otp_api_http_request(
+        'GET',
+        $url,
+        otp_api_firestore_authorized_headers()
+    );
+
+    if ($response['status'] === 404) {
         return null;
     }
 
-    return $documents[0];
+    return otp_api_firestore_decode_json_response(
+        $response,
+        'Firestore document read failed.'
+    );
+}
+
+function otp_api_firestore_create_document(
+    string $collection,
+    string $documentId,
+    array $fields
+): array {
+    $url = otp_api_firestore_documents_base_url()
+        . '/'
+        . rawurlencode($collection)
+        . '?documentId='
+        . rawurlencode($documentId);
+
+    $body = json_encode(
+        ['fields' => otp_api_firestore_encode_fields($fields)],
+        JSON_UNESCAPED_SLASHES
+    );
+
+    if ($body === false) {
+        throw new RuntimeException('Unable to encode Firestore document.');
+    }
+
+    $response = otp_api_http_request(
+        'POST',
+        $url,
+        otp_api_firestore_authorized_headers(),
+        $body
+    );
+
+    return otp_api_firestore_decode_json_response(
+        $response,
+        'Firestore document creation failed.'
+    );
+}
+
+function otp_api_firestore_patch_document(
+    string $collection,
+    string $documentId,
+    array $fields
+): array {
+    if ($fields === []) {
+        throw new InvalidArgumentException(
+            'Firestore update requires at least one field.'
+        );
+    }
+
+    $query = [];
+
+    foreach (array_keys($fields) as $fieldName) {
+        $query[] = 'updateMask.fieldPaths=' . rawurlencode((string) $fieldName);
+    }
+
+    $url = otp_api_firestore_documents_base_url()
+        . '/'
+        . rawurlencode($collection)
+        . '/'
+        . rawurlencode($documentId)
+        . '?'
+        . implode('&', $query);
+
+    $body = json_encode(
+        ['fields' => otp_api_firestore_encode_fields($fields)],
+        JSON_UNESCAPED_SLASHES
+    );
+
+    if ($body === false) {
+        throw new RuntimeException('Unable to encode Firestore document.');
+    }
+
+    $response = otp_api_http_request(
+        'PATCH',
+        $url,
+        otp_api_firestore_authorized_headers(),
+        $body
+    );
+
+    return otp_api_firestore_decode_json_response(
+        $response,
+        'Firestore document update failed.'
+    );
+}
+
+function otp_api_firestore_encode_fields(array $fields): array
+{
+    $encoded = [];
+
+    foreach ($fields as $name => $value) {
+        $encoded[(string) $name] = otp_api_firestore_encode_value($value);
+    }
+
+    return $encoded;
+}
+
+function otp_api_firestore_encode_value(mixed $value): array
+{
+    if ($value === null) {
+        return ['nullValue' => null];
+    }
+
+    if (is_bool($value)) {
+        return ['booleanValue' => $value];
+    }
+
+    if (is_int($value)) {
+        return ['integerValue' => (string) $value];
+    }
+
+    if (is_float($value)) {
+        return ['doubleValue' => $value];
+    }
+
+    if (is_string($value)) {
+        return ['stringValue' => $value];
+    }
+
+    throw new InvalidArgumentException(
+        'Unsupported Firestore field value type.'
+    );
 }
 
 function otp_api_firestore_document_id(array $document): string
