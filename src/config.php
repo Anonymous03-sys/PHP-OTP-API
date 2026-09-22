@@ -17,9 +17,27 @@ function otp_api_config(): array
     }
 
     $allowedOriginsValue = getenv('OTP_RECOVERY_ALLOWED_ORIGINS') ?: '';
-    $allowedOrigins = array_values(array_filter(array_map(
+    $configuredOrigins = array_values(array_filter(array_map(
         static fn (string $origin): string => trim($origin),
         explode(',', $allowedOriginsValue)
+    )));
+
+    // Explicit development origins are safe to keep predictable and avoid
+    // requiring a Render environment edit for local Ionic testing.
+    $localDevelopmentOrigins = [
+        'http://localhost',
+        'http://localhost:8100',
+        'http://localhost:8101',
+        'http://localhost:8102',
+        'http://127.0.0.1:8100',
+        'http://127.0.0.1:8101',
+        'http://127.0.0.1:8102',
+        'capacitor://localhost',
+    ];
+
+    $allowedOrigins = array_values(array_unique(array_merge(
+        $localDevelopmentOrigins,
+        $configuredOrigins
     )));
 
     $config = [
