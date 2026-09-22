@@ -109,13 +109,15 @@ try {
     }
 
     $completedAt = time();
+    $sessionInvalidationToken =
+        'recovery-reset-' . otp_api_random_opaque_token(18);
 
     $commitUpdates = [
         [
             'document' => $account,
             'fields' => [
                 $portalConfig['password_field'] => $newPassword,
-                'currentSessionId' => null,
+                'currentSessionId' => $sessionInvalidationToken,
             ],
         ],
         [
