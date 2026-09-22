@@ -47,12 +47,29 @@ try {
         $normalizedIdentifier
     );
 
+    error_log('[OTP Recovery] ' . json_encode([
+        'event' => 'account_resolution',
+        'portal' => $portal,
+        'resolved' => (bool) ($account['resolved'] ?? false),
+        'eligible' => (bool) ($account['eligible'] ?? false),
+        'reason' => (string) ($account['reason'] ?? 'UNKNOWN'),
+        'recipient' => ($account['email'] ?? '') !== ''
+            ? (string) $account['email']
+            : null,
+    ], JSON_UNESCAPED_SLASHES));
+
     $challenge = otp_api_issue_recovery_challenge(
         $account,
         $portal,
         $normalizedIdentifier
     );
-} catch (Throwable) {
+} catch (Throwable $error) {
+    error_log('[OTP Recovery] ' . json_encode([
+        'event' => 'request_failure',
+        'portal' => $portal,
+        'error_type' => get_class($error),
+    ], JSON_UNESCAPED_SLASHES));
+
     otp_api_json_response(503, [
         'success' => false,
         'code' => 'RECOVERY_SERVICE_UNAVAILABLE',
@@ -79,17 +96,47 @@ $otp = is_string($challenge['otp'] ?? null)
     ? $challenge['otp']
     : '';
 
+error_log('[OTP Recovery] ' . json_encode([
+    'event' => 'challenge_state',
+    'portal' => $portal,
+    'challenge' => $challengeId !== ''
+        ? substr($challengeId, 0, 8)
+        : null,
+    'status' => (string) ($challenge['status'] ?? 'UNKNOWN'),
+    'created' => $created,
+    'should_deliver' => $shouldDeliver,
+], JSON_UNESCAPED_SLASHES));
+
 if (
     $created &&
     $shouldDeliver &&
     $challengeId !== '' &&
     $otp !== ''
 ) {
+    $destinationEmail = (string) ($account['email'] ?? '');
+
+    error_log('[OTP Recovery] ' . json_encode([
+        'event' => 'delivery_attempt',
+        'portal' => $portal,
+        'challenge' => substr($challengeId, 0, 8),
+        'recipient' => $destinationEmail,
+    ], JSON_UNESCAPED_SLASHES));
+
     $delivery = otp_api_send_recovery_otp(
-        (string) ($account['email'] ?? ''),
+        $destinationEmail,
         $otp,
         (int) ($challenge['expires_in'] ?? 300)
     );
+
+    error_log('[OTP Recovery] ' . json_encode([
+        'event' => 'delivery_result',
+        'portal' => $portal,
+        'challenge' => substr($challengeId, 0, 8),
+        'recipient' => $destinationEmail,
+        'success' => (bool) ($delivery['success'] ?? false),
+        'status_code' => (int) ($delivery['status_code'] ?? 0),
+        'reason' => (string) ($delivery['reason'] ?? 'UNKNOWN'),
+    ], JSON_UNESCAPED_SLASHES));
 
     try {
         otp_api_update_challenge($challengeId, [
@@ -109,10 +156,29 @@ if (
                 ? time()
                 : null,
         ]);
-    } catch (RuntimeException) {
+    } catch (RuntimeException $error) {
+        error_log('[OTP Recovery] ' . json_encode([
+            'event' => 'delivery_state_persist_failure',
+            'portal' => $portal,
+            'challenge' => substr($challengeId, 0, 8),
+            'error_type' => get_class($error),
+        ], JSON_UNESCAPED_SLASHES));
+
         // The API response remains generic. Delivery-state persistence is
         // operational metadata and must never expose provider details.
     }
+} else {
+    error_log('[OTP Recovery] ' . json_encode([
+        'event' => 'delivery_skipped',
+        'portal' => $portal,
+        'challenge' => $challengeId !== ''
+            ? substr($challengeId, 0, 8)
+            : null,
+        'account_reason' => (string) ($account['reason'] ?? 'UNKNOWN'),
+        'challenge_status' => (string) ($challenge['status'] ?? 'UNKNOWN'),
+        'created' => $created,
+        'should_deliver' => $shouldDeliver,
+    ], JSON_UNESCAPED_SLASHES));
 }
 
 otp_api_pad_response_time($requestStartedAt);
