@@ -40,6 +40,14 @@ function otp_api_hash_otp(string $challengeId, string $otp): string
     );
 }
 
+function otp_api_hash_reset_token(string $resetToken): string
+{
+    return otp_api_recovery_hmac(
+        'reset-token',
+        $resetToken
+    );
+}
+
 function otp_api_account_key(string $portal, string $identifier): string
 {
     return otp_api_recovery_hmac(
@@ -328,6 +336,10 @@ function otp_api_issue_recovery_challenge(
         'max_attempts' => (int) $config['max_otp_attempts'],
         'state' => 'PENDING',
         'verified_at_epoch' => null,
+        'reset_token_hash' => null,
+        'reset_token_issued_at_epoch' => null,
+        'reset_token_expires_at_epoch' => null,
+        'reset_token_used' => false,
         'completed_at_epoch' => null,
     ]);
 
@@ -453,6 +465,7 @@ function otp_api_verify_challenge_otp(
         otp_api_update_challenge($challengeId, [
             'state' => 'CONSUMED',
             'verified_at_epoch' => $now,
+            'otp_hash' => null,
         ]);
 
         return [
@@ -461,25 +474,28 @@ function otp_api_verify_challenge_otp(
         ];
     }
 
+    $resetToken = otp_api_random_opaque_token(32);
+    $resetTokenTtl = (int) otp_api_config()['reset_token_ttl_seconds'];
+    $resetTokenExpiresAt = $now + $resetTokenTtl;
+
+    // OTP consumption and reset-token issuance are persisted together. If this
+    // write fails, the OTP remains pending and the caller can safely retry.
     otp_api_update_challenge($challengeId, [
         'state' => 'VERIFIED',
         'verified_at_epoch' => $now,
         'attempts_used' => $attemptsUsed + 1,
+        'otp_hash' => null,
+        'reset_token_hash' => otp_api_hash_reset_token($resetToken),
+        'reset_token_issued_at_epoch' => $now,
+        'reset_token_expires_at_epoch' => $resetTokenExpiresAt,
+        'reset_token_used' => false,
     ]);
 
     return [
         'success' => true,
         'code' => 'OTP_VERIFIED',
         'challenge_id' => $challengeId,
-        'account_document_id' => (string) otp_api_challenge_field(
-            $challenge,
-            'account_document_id',
-            ''
-        ),
-        'portal' => (string) otp_api_challenge_field(
-            $challenge,
-            'portal',
-            ''
-        ),
+        'reset_token' => $resetToken,
+        'reset_token_expires_in' => $resetTokenTtl,
     ];
 }

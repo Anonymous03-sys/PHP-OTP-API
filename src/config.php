@@ -30,6 +30,7 @@ function otp_api_config(): array
         'otp_ttl_seconds' => 300,
         'resend_cooldown_seconds' => 60,
         'max_otp_attempts' => 5,
+        'reset_token_ttl_seconds' => 600,
         'account_rate_window_seconds' => 900,
         'account_rate_max_requests' => 5,
         'source_rate_window_seconds' => 900,
