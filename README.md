@@ -19,80 +19,83 @@ Versioned endpoints:
 - `POST /v1/password-reset/verify.php`
 - `POST /v1/password-reset/complete.php`
 
-### OTP-5 state
+### OTP-6 state
 
-The request endpoint resolves an eligible account, creates a durable challenge,
-and sends the OTP to the server-resolved registered email.
+The complete password-recovery backend flow is active.
 
-The verification endpoint is now active.
-
-Request:
+`complete.php` accepts:
 
 ```json
 {
-  "challengeId": "<opaque-challenge-id>",
-  "otp": "123456"
+  "resetToken": "<restricted-reset-token>",
+  "newPassword": "<new-password>"
 }
 ```
 
-Successful verification:
+Before changing the password, the server:
 
-```json
-{
-  "success": true,
-  "code": "OTP_VERIFIED",
-  "message": "Verification successful. You can now create a new password.",
-  "resetToken": "<one-purpose-random-token>",
-  "expiresIn": 600
-}
-```
+1. HMACs the supplied reset token and resolves exactly one VERIFIED challenge.
+2. Requires the token to be unused and within its 10-minute lifetime.
+3. Loads the account bound to that challenge through the fixed portal mapping.
+4. Re-checks current account eligibility so recovery cannot reactivate or
+   bypass a newly disabled/inactive account.
+5. Applies the same password policy currently used by that portal.
 
-The raw reset token is returned once to the caller. Firestore stores only its
-HMAC in the challenge document.
+Portal password policies:
 
-Reset-token policy:
+- Senior: minimum 8 characters, at least one letter and one number.
+- LGU: minimum 8 characters, uppercase, lowercase, number, and one of
+  `@$!%*?&_-#`; the complete password is restricted to the characters allowed
+  by the current LGU profile validator.
+- Super Admin: minimum 8 characters, uppercase, lowercase, number, and a
+  special/non-word character.
 
-- random 32-byte source value encoded as an opaque URL-safe token
-- lifetime: 10 minutes
-- bound to the already verified recovery challenge/account
-- stored only as `reset_token_hash`
-- OTP hash is cleared when verification succeeds
-- OTP and reset-token issuance are persisted in the same Firestore update
-- challenge state changes from `PENDING` to `VERIFIED`
-- a second OTP verification attempt cannot issue another token
-- token does not create an application session
-- token does not grant normal portal access
-- token authorizes only the later password-reset completion operation
+The account password remains a plain Firestore string by explicit project
+requirement.
 
-The public `complete.php` endpoint is intentionally still inactive until
-OTP-6. No password is changed in OTP-5.
+### Atomic reset completion
 
-### OTP challenge policy
+One Firestore commit updates all core security state:
 
-- six-digit OTP generated with `random_int()`
-- OTP lifetime: 5 minutes
-- resend cooldown: 60 seconds
-- maximum OTP guesses: 5
-- resend supersedes prior pending challenge after cooldown
-- OTP stored only as HMAC
-- account/source throttling uses HMAC keys
-- durable collection: `password_reset_challenges`
+- existing password field -> new plain string
+- `currentSessionId -> null`
+- current challenge `state -> COMPLETED`
+- current `otp_hash -> null`
+- current `reset_token_hash -> null`
+- current `reset_token_used -> true`
+- completion timestamp
+- all sibling PENDING/VERIFIED recovery challenges for the same account ->
+  `SUPERSEDED`, with OTP/reset-token hashes cleared
 
-### Email delivery
+Firestore update-time preconditions are included when available so concurrent
+changes cause the commit to fail rather than silently overwriting newer state.
 
-The v1 recovery flow uses the existing SendGrid dependency and
-`SENDGRID_API_KEY`, with separate Senior Citizen Information System branding.
-Only fresh, eligible challenges send mail to the server-resolved account email.
-Legacy Codetology mail remains unchanged.
+Existing signed-in sessions are invalidated through the same
+`currentSessionId` mechanism already used by the three applications.
+
+After the atomic reset succeeds, a separate password-changed informational
+email is sent to the account's registered email. Notification failure does not
+roll back the completed password reset.
+
+The reset endpoint never creates an application session and never
+automatically logs the user in. The user must return to normal sign-in.
+
+### Recovery stages now active
+
+- request: trusted account resolution, durable challenge issuance, throttling,
+  and OTP email delivery
+- verify: OTP validation and 10-minute one-purpose reset token
+- complete: password replacement, reset-token consumption, sibling challenge
+  invalidation, and session invalidation
 
 ### Fixed portal mapping
 
-- `senior` -> `seniorcitizens.senior_id_number`
-- `lgu` -> `seniorlgu.employee_no`
-- `sysadmin` -> `seniorsysadusers.employee_no`
+- `senior` -> `seniorcitizens.senior_id_number / senior_password`
+- `lgu` -> `seniorlgu.employee_no / password`
+- `sysadmin` -> `seniorsysadusers.employee_no / password`
 
-The client cannot choose Firestore collections, document IDs, password fields,
-or recovery email addresses.
+The client cannot select a collection, document ID, password field, or recovery
+email.
 
 ## Environment
 

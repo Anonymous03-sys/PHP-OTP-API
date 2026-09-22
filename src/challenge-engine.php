@@ -499,3 +499,151 @@ function otp_api_verify_challenge_otp(
         'reset_token_expires_in' => $resetTokenTtl,
     ];
 }
+
+function otp_api_find_verified_challenge_by_reset_token(
+    string $resetToken
+): ?array {
+    $resetToken = trim($resetToken);
+
+    if (!preg_match('/^[A-Za-z0-9_-]{30,100}$/', $resetToken)) {
+        return null;
+    }
+
+    $resetTokenHash = otp_api_hash_reset_token($resetToken);
+    $matches = otp_api_find_challenges_by_key(
+        'reset_token_hash',
+        $resetTokenHash
+    );
+
+    if (count($matches) !== 1) {
+        return null;
+    }
+
+    $challenge = $matches[0];
+    $storedHash = (string) otp_api_challenge_field(
+        $challenge,
+        'reset_token_hash',
+        ''
+    );
+
+    if (
+        $storedHash === '' ||
+        !hash_equals($storedHash, $resetTokenHash)
+    ) {
+        return null;
+    }
+
+    return $challenge;
+}
+
+function otp_api_validate_reset_authorization(
+    string $resetToken
+): array {
+    $challenge = otp_api_find_verified_challenge_by_reset_token(
+        $resetToken
+    );
+
+    if ($challenge === null) {
+        return [
+            'valid' => false,
+            'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+        ];
+    }
+
+    if (otp_api_challenge_state($challenge) !== 'VERIFIED') {
+        return [
+            'valid' => false,
+            'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+        ];
+    }
+
+    if (!(bool) otp_api_challenge_field($challenge, 'eligible', false)) {
+        return [
+            'valid' => false,
+            'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+        ];
+    }
+
+    if ((bool) otp_api_challenge_field(
+        $challenge,
+        'reset_token_used',
+        false
+    )) {
+        return [
+            'valid' => false,
+            'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+        ];
+    }
+
+    $expiresAt = (int) otp_api_challenge_field(
+        $challenge,
+        'reset_token_expires_at_epoch',
+        0
+    );
+
+    if ($expiresAt <= time()) {
+        $challengeId = otp_api_firestore_document_id($challenge);
+
+        if ($challengeId !== '') {
+            otp_api_update_challenge($challengeId, [
+                'state' => 'EXPIRED',
+                'reset_token_hash' => null,
+                'reset_token_used' => true,
+                'expired_at_epoch' => time(),
+            ]);
+        }
+
+        return [
+            'valid' => false,
+            'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+        ];
+    }
+
+    return [
+        'valid' => true,
+        'challenge' => $challenge,
+    ];
+}
+
+function otp_api_build_sibling_invalidation_updates(
+    string $accountKey,
+    string $completedChallengeId,
+    int $completedAt
+): array {
+    if ($accountKey === '') {
+        return [];
+    }
+
+    $updates = [];
+    $siblings = otp_api_find_account_challenges($accountKey);
+
+    foreach ($siblings as $sibling) {
+        $siblingId = otp_api_firestore_document_id($sibling);
+
+        if (
+            $siblingId === '' ||
+            $siblingId === $completedChallengeId
+        ) {
+            continue;
+        }
+
+        $state = otp_api_challenge_state($sibling);
+
+        if (!in_array($state, ['PENDING', 'VERIFIED'], true)) {
+            continue;
+        }
+
+        $updates[] = [
+            'document' => $sibling,
+            'fields' => [
+                'state' => 'SUPERSEDED',
+                'otp_hash' => null,
+                'reset_token_hash' => null,
+                'reset_token_used' => true,
+                'superseded_at_epoch' => $completedAt,
+            ],
+        ];
+    }
+
+    return $updates;
+}

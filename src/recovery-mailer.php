@@ -148,3 +148,95 @@ function otp_api_send_recovery_otp(
         ];
     }
 }
+
+function otp_api_send_password_changed_notice(
+    string $destinationEmail
+): array {
+    $destinationEmail = trim($destinationEmail);
+
+    if (!filter_var($destinationEmail, FILTER_VALIDATE_EMAIL)) {
+        return [
+            'success' => false,
+            'status_code' => 0,
+            'reason' => 'INVALID_DESTINATION',
+        ];
+    }
+
+    $apiKey = trim((string) (getenv('SENDGRID_API_KEY') ?: ''));
+
+    if ($apiKey === '') {
+        return [
+            'success' => false,
+            'status_code' => 0,
+            'reason' => 'MAIL_CONFIGURATION_UNAVAILABLE',
+        ];
+    }
+
+    try {
+        $sender = otp_api_recovery_sender();
+        $sendgrid = new \\SendGrid($apiKey);
+        $message = new \\SendGrid\\Mail\\Mail();
+
+        $message->setFrom($sender['email'], $sender['name']);
+        $message->setSubject(
+            'Senior Citizen Information System - Password Changed'
+        );
+        $message->addTo($destinationEmail);
+
+        $plainText = implode("\n", [
+            'Senior Citizen Information System',
+            'Password Changed',
+            '',
+            'The password for your account was successfully changed.',
+            '',
+            'If you made this change, no further action is required.',
+            'If you did not perform this action, contact your authorized LGU or system administrator immediately.',
+            '',
+            'For your protection, existing signed-in sessions were invalidated.',
+            '',
+            'This is an automated message. Please do not reply.',
+        ]);
+
+        $html = "
+        <div style='font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 620px; margin: 0 auto;'>
+            <div style='background: #0f766e; color: #ffffff; padding: 20px 24px; border-radius: 12px 12px 0 0;'>
+                <div style='font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9;'>LGU E-Services</div>
+                <h2 style='margin: 6px 0 0;'>Senior Citizen Information System</h2>
+            </div>
+            <div style='border: 1px solid #d1d5db; border-top: 0; padding: 24px; border-radius: 0 0 12px 12px; background: #ffffff;'>
+                <h3 style='margin-top: 0; color: #111827;'>Password Changed</h3>
+                <p>The password for your account was successfully changed.</p>
+                <p>If you made this change, no further action is required.</p>
+                <p>If you did not perform this action, contact your authorized LGU or system administrator immediately.</p>
+                <p>For your protection, existing signed-in sessions were invalidated.</p>
+                <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;'>
+                <p style='font-size: 12px; color: #6b7280; margin-bottom: 0;'>
+                    Senior Citizen Information System<br>
+                    LGU E-Services<br>
+                    This is an automated message. Please do not reply.
+                </p>
+            </div>
+        </div>
+        ";
+
+        $message->addContent('text/plain', $plainText);
+        $message->addContent('text/html', $html);
+
+        $response = $sendgrid->send($message);
+        $statusCode = (int) $response->statusCode();
+
+        return [
+            'success' => $statusCode >= 200 && $statusCode < 300,
+            'status_code' => $statusCode,
+            'reason' => $statusCode >= 200 && $statusCode < 300
+                ? 'SENT'
+                : 'PROVIDER_REJECTED',
+        ];
+    } catch (Throwable) {
+        return [
+            'success' => false,
+            'status_code' => 0,
+            'reason' => 'DELIVERY_EXCEPTION',
+        ];
+    }
+}

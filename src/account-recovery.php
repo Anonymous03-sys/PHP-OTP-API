@@ -232,3 +232,83 @@ function otp_api_resolve_recovery_account(
         'masked_email' => $validEmail ? otp_api_mask_email($email) : '',
     ];
 }
+
+function otp_api_validate_recovery_password(
+    string $portal,
+    string $password
+): array {
+    $portalKey = strtolower(trim($portal));
+
+    if ($portalKey === 'senior') {
+        $valid =
+            strlen($password) >= 8 &&
+            preg_match('/[A-Za-z]/', $password) === 1 &&
+            preg_match('/\d/', $password) === 1;
+
+        return [
+            'valid' => $valid,
+            'message' => 'Use at least 8 characters with at least one letter and one number.',
+        ];
+    }
+
+    if ($portalKey === 'lgu') {
+        $valid = preg_match(
+            '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&_\-#])[A-Za-z\d@$!%*?&_\-#]{8,}$/',
+            $password
+        ) === 1;
+
+        return [
+            'valid' => $valid,
+            'message' => 'Use at least 8 characters with uppercase, lowercase, number, and one allowed special character: @$!%*?&_-#.',
+        ];
+    }
+
+    if ($portalKey === 'sysadmin') {
+        $valid = preg_match(
+            '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/',
+            $password
+        ) === 1;
+
+        return [
+            'valid' => $valid,
+            'message' => 'Use at least 8 characters with uppercase, lowercase, number, and special character.',
+        ];
+    }
+
+    return [
+        'valid' => false,
+        'message' => 'The recovery portal is invalid.',
+    ];
+}
+
+function otp_api_get_current_recovery_account(
+    string $portal,
+    string $accountDocumentId
+): ?array {
+    $portalConfig = otp_api_get_recovery_portal($portal);
+
+    if ($portalConfig === null || trim($accountDocumentId) === '') {
+        return null;
+    }
+
+    return otp_api_firestore_get_document(
+        $portalConfig['collection'],
+        $accountDocumentId
+    );
+}
+
+function otp_api_is_current_recovery_account_eligible(
+    string $portal,
+    array $document
+): bool {
+    $portalConfig = otp_api_get_recovery_portal($portal);
+
+    if ($portalConfig === null) {
+        return false;
+    }
+
+    return otp_api_is_recovery_eligible(
+        $portalConfig['eligibility'],
+        $document
+    );
+}

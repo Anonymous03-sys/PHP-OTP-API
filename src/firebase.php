@@ -440,6 +440,80 @@ function otp_api_firestore_encode_value(mixed $value): array
     );
 }
 
+function otp_api_firestore_commit_document_updates(array $updates): array
+{
+    if ($updates === []) {
+        throw new InvalidArgumentException(
+            'Firestore commit requires at least one update.'
+        );
+    }
+
+    $writes = [];
+
+    foreach ($updates as $update) {
+        $document = $update['document'] ?? null;
+        $fields = $update['fields'] ?? null;
+
+        if (!is_array($document) || !is_array($fields) || $fields === []) {
+            throw new InvalidArgumentException(
+                'Firestore commit update is invalid.'
+            );
+        }
+
+        $name = trim((string) ($document['name'] ?? ''));
+
+        if ($name === '') {
+            throw new InvalidArgumentException(
+                'Firestore document name is missing.'
+            );
+        }
+
+        $write = [
+            'update' => [
+                'name' => $name,
+                'fields' => otp_api_firestore_encode_fields($fields),
+            ],
+            'updateMask' => [
+                'fieldPaths' => array_values(array_map(
+                    static fn ($field): string => (string) $field,
+                    array_keys($fields)
+                )),
+            ],
+        ];
+
+        $updateTime = trim((string) ($document['updateTime'] ?? ''));
+
+        if ($updateTime !== '') {
+            $write['currentDocument'] = [
+                'updateTime' => $updateTime,
+            ];
+        }
+
+        $writes[] = $write;
+    }
+
+    $body = json_encode(
+        ['writes' => $writes],
+        JSON_UNESCAPED_SLASHES
+    );
+
+    if ($body === false) {
+        throw new RuntimeException('Unable to encode Firestore commit.');
+    }
+
+    $response = otp_api_http_request(
+        'POST',
+        otp_api_firestore_documents_base_url() . ':commit',
+        otp_api_firestore_authorized_headers(),
+        $body
+    );
+
+    return otp_api_firestore_decode_json_response(
+        $response,
+        'Firestore atomic update failed.'
+    );
+}
+
 function otp_api_firestore_document_id(array $document): string
 {
     $name = trim((string) ($document['name'] ?? ''));
