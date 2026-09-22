@@ -338,6 +338,20 @@ pepper.
 The new v1 endpoints use their own allowed-origin list. They do not inherit the
 legacy wildcard CORS policy.
 
+For local Ionic/Capacitor testing, the backend explicitly allows:
+
+- `http://localhost`
+- `http://localhost:8100`
+- `http://localhost:8101`
+- `http://localhost:8102`
+- `http://127.0.0.1:8100`
+- `http://127.0.0.1:8101`
+- `http://127.0.0.1:8102`
+- `capacitor://localhost`
+
+Deployed frontend origins must still be configured through
+`OTP_RECOVERY_ALLOWED_ORIGINS`.
+
 Public recovery errors are deliberately generic. Provider response bodies,
 Firebase internals, service-account data, stack traces, passwords, OTP hashes,
 and reset-token hashes must not be returned to clients.
