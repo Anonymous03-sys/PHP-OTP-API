@@ -74,6 +74,22 @@ function otp_api_load_firebase_service_account(): array
         }
     }
 
+    $credentialProjectId = trim((string) (
+        $decoded['project_id'] ?? ''
+    ));
+    $targetProjectId = otp_api_firebase_project_id();
+
+    if (
+        $credentialProjectId !== '' &&
+        $credentialProjectId !== $targetProjectId
+    ) {
+        error_log(sprintf(
+            '[password-recovery] Firebase credential project mismatch: credential=%s target=%s',
+            $credentialProjectId,
+            $targetProjectId
+        ));
+    }
+
     $serviceAccount = $decoded;
 
     return $serviceAccount;
@@ -177,8 +193,7 @@ function otp_api_firebase_access_token(): string
 
 function otp_api_firestore_documents_base_url(): string
 {
-    $serviceAccount = otp_api_load_firebase_service_account();
-    $projectId = rawurlencode((string) $serviceAccount['project_id']);
+    $projectId = rawurlencode(otp_api_firebase_project_id());
 
     return sprintf(
         'https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents',
@@ -190,11 +205,9 @@ function otp_api_firestore_document_name(
     string $collection,
     string $documentId
 ): string {
-    $serviceAccount = otp_api_load_firebase_service_account();
-
     return sprintf(
         'projects/%s/databases/(default)/documents/%s/%s',
-        (string) $serviceAccount['project_id'],
+        otp_api_firebase_project_id(),
         rawurlencode($collection),
         rawurlencode($documentId)
     );
