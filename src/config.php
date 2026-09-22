@@ -27,6 +27,8 @@ function otp_api_config(): array
         'api_version' => 'v1',
         'allowed_origins' => $allowedOrigins,
         'challenge_collection' => 'password_reset_challenges',
+        'challenge_lock_collection' => 'password_reset_locks',
+        'challenge_retention_seconds' => 604800,
         'otp_ttl_seconds' => 300,
         'resend_cooldown_seconds' => 60,
         'max_otp_attempts' => 5,
@@ -35,7 +37,11 @@ function otp_api_config(): array
         'account_rate_max_requests' => 5,
         'source_rate_window_seconds' => 900,
         'source_rate_max_requests' => 20,
-        'challenge_history_limit' => 50,
+        'challenge_history_limit' => 100,
+        'trusted_proxy_headers' => filter_var(
+            getenv('OTP_RECOVERY_TRUST_PROXY_HEADERS') ?: 'false',
+            FILTER_VALIDATE_BOOLEAN
+        ),
     ];
 
     return $config;
