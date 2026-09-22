@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 2) . '/src/bootstrap.php';
 require_once dirname(__DIR__, 2) . '/src/challenge-engine.php';
 
 otp_api_require_method('POST');
+otp_api_require_json_content_type();
 
 $payload = otp_api_read_json_body();
 $challengeId = is_string($payload['challengeId'] ?? null)
@@ -31,7 +32,7 @@ try {
         $challengeId,
         $otp
     );
-} catch (RuntimeException) {
+} catch (Throwable) {
     otp_api_json_response(503, [
         'success' => false,
         'code' => 'RECOVERY_SERVICE_UNAVAILABLE',
