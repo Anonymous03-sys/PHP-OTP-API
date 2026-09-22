@@ -16,5 +16,5 @@ otp_api_json_response(200, [
     'success' => true,
     'service' => 'php-otp-api',
     'legacyOtp' => 'available',
-    'recoveryApi' => 'scaffold',
+    'recoveryApi' => 'account-resolution',
 ]);
