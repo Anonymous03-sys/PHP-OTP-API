@@ -196,6 +196,16 @@ function otp_api_supersede_pending_challenges(
             continue;
         }
 
+        $expiresAt = (int) otp_api_challenge_field(
+            $document,
+            'expires_at_epoch',
+            0
+        );
+
+        if ($expiresAt <= $now) {
+            continue;
+        }
+
         $documentId = otp_api_firestore_document_id($document);
 
         if ($documentId !== '') {
