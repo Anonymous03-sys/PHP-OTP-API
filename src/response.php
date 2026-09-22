@@ -7,6 +7,8 @@ function otp_api_json_response(int $status, array $payload): never
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    header('Pragma: no-cache');
+    header('X-Content-Type-Options: nosniff');
 
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
@@ -43,12 +45,48 @@ function otp_api_require_method(string $expectedMethod): void
     }
 }
 
-function otp_api_read_json_body(): array
+function otp_api_require_json_content_type(): void
 {
+    $contentType = strtolower(trim((string) (
+        $_SERVER['CONTENT_TYPE'] ?? ''
+    )));
+
+    if (
+        $contentType === '' ||
+        !str_starts_with($contentType, 'application/json')
+    ) {
+        otp_api_json_response(415, [
+            'success' => false,
+            'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            'message' => 'Requests to this endpoint must use JSON.',
+        ]);
+    }
+}
+
+function otp_api_read_json_body(int $maxBytes = 8192): array
+{
+    $declaredLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+
+    if ($declaredLength > $maxBytes) {
+        otp_api_json_response(413, [
+            'success' => false,
+            'code' => 'REQUEST_TOO_LARGE',
+            'message' => 'The request body is too large.',
+        ]);
+    }
+
     $rawBody = file_get_contents('php://input');
 
     if ($rawBody === false || trim($rawBody) === '') {
         return [];
+    }
+
+    if (strlen($rawBody) > $maxBytes) {
+        otp_api_json_response(413, [
+            'success' => false,
+            'code' => 'REQUEST_TOO_LARGE',
+            'message' => 'The request body is too large.',
+        ]);
     }
 
     try {
@@ -70,4 +108,24 @@ function otp_api_read_json_body(): array
     }
 
     return $payload;
+}
+
+
+function otp_api_pad_response_time(
+    float $startedAt,
+    int $minimumMilliseconds = 700,
+    int $jitterMilliseconds = 250
+): void {
+    $jitter = $jitterMilliseconds > 0
+        ? random_int(0, $jitterMilliseconds)
+        : 0;
+    $targetMicroseconds = ($minimumMilliseconds + $jitter) * 1000;
+    $elapsedMicroseconds = (int) round(
+        (microtime(true) - $startedAt) * 1000000
+    );
+    $remaining = $targetMicroseconds - $elapsedMicroseconds;
+
+    if ($remaining > 0) {
+        usleep($remaining);
+    }
 }
