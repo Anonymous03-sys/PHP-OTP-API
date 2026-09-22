@@ -66,7 +66,8 @@ try {
     if (
         $challengeId === '' ||
         $portalConfig === null ||
-        $accountDocumentId === ''
+        $accountDocumentId === '' ||
+        $accountKey === ''
     ) {
         otp_api_json_response(400, [
             'success' => false,
@@ -143,9 +144,34 @@ try {
         )
     );
 
-    // Password replacement, session invalidation, reset-token consumption, and
-    // sibling recovery invalidation are one Firestore commit.
-    otp_api_firestore_commit_document_updates($commitUpdates);
+    $challengeLock = otp_api_get_challenge_lock($accountKey);
+    $commitWrites = [];
+
+    foreach ($commitUpdates as $commitUpdate) {
+        $commitWrites[] = otp_api_firestore_build_update_write(
+            $commitUpdate['document'],
+            $commitUpdate['fields']
+        );
+    }
+
+    // The issuance lock participates in the same commit. A recovery request
+    // racing this completion must therefore retry from fresh account/challenge
+    // state instead of leaving a newly-issued sibling challenge unnoticed.
+    $commitWrites[] = otp_api_firestore_build_conditional_set_write(
+        otp_api_challenge_lock_collection(),
+        $accountKey,
+        [
+            'active_challenge_id' => '',
+            'resend_after_epoch' => 0,
+            'expires_at_epoch' => 0,
+            'updated_at_epoch' => $completedAt,
+        ],
+        $challengeLock
+    );
+
+    // Password replacement, session invalidation, token consumption, sibling
+    // invalidation, and issuance-lock release are one Firestore commit.
+    otp_api_firestore_commit_writes($commitWrites);
 
     $email = trim((string) otp_api_firestore_field(
         $account,
