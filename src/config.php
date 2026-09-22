@@ -26,12 +26,19 @@ function otp_api_config(): array
     // requiring a Render environment edit for local Ionic testing.
     $localDevelopmentOrigins = [
         'http://localhost',
+        'https://localhost',
         'http://localhost:8100',
         'http://localhost:8101',
         'http://localhost:8102',
+        'https://localhost:8100',
+        'https://localhost:8101',
+        'https://localhost:8102',
         'http://127.0.0.1:8100',
         'http://127.0.0.1:8101',
         'http://127.0.0.1:8102',
+        'https://127.0.0.1:8100',
+        'https://127.0.0.1:8101',
+        'https://127.0.0.1:8102',
         'capacitor://localhost',
     ];
 
