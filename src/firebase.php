@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/http.php';
 
+final class OtpApiFirestoreConflictException extends RuntimeException
+{
+}
+
 function otp_api_base64url_encode(string $value): string
 {
     return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
@@ -182,6 +186,20 @@ function otp_api_firestore_documents_base_url(): string
     );
 }
 
+function otp_api_firestore_document_name(
+    string $collection,
+    string $documentId
+): string {
+    $serviceAccount = otp_api_load_firebase_service_account();
+
+    return sprintf(
+        'projects/%s/databases/(default)/documents/%s/%s',
+        (string) $serviceAccount['project_id'],
+        rawurlencode($collection),
+        rawurlencode($documentId)
+    );
+}
+
 function otp_api_firestore_authorized_headers(): array
 {
     return [
@@ -195,6 +213,10 @@ function otp_api_firestore_decode_json_response(
     string $failureMessage
 ): array {
     if ($response['status'] < 200 || $response['status'] >= 300) {
+        if (in_array((int) $response['status'], [409, 412], true)) {
+            throw new OtpApiFirestoreConflictException($failureMessage);
+        }
+
         throw new RuntimeException($failureMessage);
     }
 
@@ -440,60 +462,103 @@ function otp_api_firestore_encode_value(mixed $value): array
     );
 }
 
-function otp_api_firestore_commit_document_updates(array $updates): array
-{
-    if ($updates === []) {
+function otp_api_firestore_build_update_write(
+    array $document,
+    array $fields
+): array {
+    if ($fields === []) {
         throw new InvalidArgumentException(
-            'Firestore commit requires at least one update.'
+            'Firestore update requires at least one field.'
         );
     }
 
-    $writes = [];
+    $name = trim((string) ($document['name'] ?? ''));
 
-    foreach ($updates as $update) {
-        $document = $update['document'] ?? null;
-        $fields = $update['fields'] ?? null;
+    if ($name === '') {
+        throw new InvalidArgumentException(
+            'Firestore document name is missing.'
+        );
+    }
 
-        if (!is_array($document) || !is_array($fields) || $fields === []) {
+    $write = [
+        'update' => [
+            'name' => $name,
+            'fields' => otp_api_firestore_encode_fields($fields),
+        ],
+        'updateMask' => [
+            'fieldPaths' => array_values(array_map(
+                static fn ($field): string => (string) $field,
+                array_keys($fields)
+            )),
+        ],
+    ];
+
+    $updateTime = trim((string) ($document['updateTime'] ?? ''));
+
+    if ($updateTime !== '') {
+        $write['currentDocument'] = ['updateTime' => $updateTime];
+    }
+
+    return $write;
+}
+
+function otp_api_firestore_build_conditional_set_write(
+    string $collection,
+    string $documentId,
+    array $fields,
+    ?array $existingDocument = null
+): array {
+    if ($fields === []) {
+        throw new InvalidArgumentException(
+            'Firestore set requires at least one field.'
+        );
+    }
+
+    $write = [
+        'update' => [
+            'name' => otp_api_firestore_document_name(
+                $collection,
+                $documentId
+            ),
+            'fields' => otp_api_firestore_encode_fields($fields),
+        ],
+        'updateMask' => [
+            'fieldPaths' => array_values(array_map(
+                static fn ($field): string => (string) $field,
+                array_keys($fields)
+            )),
+        ],
+    ];
+
+    if ($existingDocument === null) {
+        $write['currentDocument'] = ['exists' => false];
+    } else {
+        $updateTime = trim((string) (
+            $existingDocument['updateTime'] ?? ''
+        ));
+
+        if ($updateTime === '') {
             throw new InvalidArgumentException(
-                'Firestore commit update is invalid.'
+                'Firestore conditional set requires updateTime.'
             );
         }
 
-        $name = trim((string) ($document['name'] ?? ''));
+        $write['currentDocument'] = ['updateTime' => $updateTime];
+    }
 
-        if ($name === '') {
-            throw new InvalidArgumentException(
-                'Firestore document name is missing.'
-            );
-        }
+    return $write;
+}
 
-        $write = [
-            'update' => [
-                'name' => $name,
-                'fields' => otp_api_firestore_encode_fields($fields),
-            ],
-            'updateMask' => [
-                'fieldPaths' => array_values(array_map(
-                    static fn ($field): string => (string) $field,
-                    array_keys($fields)
-                )),
-            ],
-        ];
-
-        $updateTime = trim((string) ($document['updateTime'] ?? ''));
-
-        if ($updateTime !== '') {
-            $write['currentDocument'] = [
-                'updateTime' => $updateTime,
-            ];
-        }
-
-        $writes[] = $write;
+function otp_api_firestore_commit_writes(array $writes): array
+{
+    if ($writes === []) {
+        throw new InvalidArgumentException(
+            'Firestore commit requires at least one write.'
+        );
     }
 
     $body = json_encode(
-        ['writes' => $writes],
+        ['writes' => array_values($writes)],
         JSON_UNESCAPED_SLASHES
     );
 
@@ -512,6 +577,35 @@ function otp_api_firestore_commit_document_updates(array $updates): array
         $response,
         'Firestore atomic update failed.'
     );
+}
+
+function otp_api_firestore_commit_document_updates(array $updates): array
+{
+    if ($updates === []) {
+        throw new InvalidArgumentException(
+            'Firestore commit requires at least one update.'
+        );
+    }
+
+    $writes = [];
+
+    foreach ($updates as $update) {
+        $document = $update['document'] ?? null;
+        $fields = $update['fields'] ?? null;
+
+        if (!is_array($document) || !is_array($fields)) {
+            throw new InvalidArgumentException(
+                'Firestore commit update is invalid.'
+            );
+        }
+
+        $writes[] = otp_api_firestore_build_update_write(
+            $document,
+            $fields
+        );
+    }
+
+    return otp_api_firestore_commit_writes($writes);
 }
 
 function otp_api_firestore_document_id(array $document): string
