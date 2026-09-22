@@ -8,6 +8,7 @@ require_once dirname(__DIR__, 2) . '/src/challenge-engine.php';
 require_once dirname(__DIR__, 2) . '/src/recovery-mailer.php';
 
 otp_api_require_method('POST');
+otp_api_require_json_content_type();
 
 $payload = otp_api_read_json_body();
 $resetToken = is_string($payload['resetToken'] ?? null)
@@ -19,7 +20,8 @@ $newPassword = is_string($payload['newPassword'] ?? null)
 
 if (
     !preg_match('/^[A-Za-z0-9_-]{30,100}$/', $resetToken) ||
-    $newPassword === ''
+    $newPassword === '' ||
+    strlen($newPassword) > 256
 ) {
     otp_api_json_response(400, [
         'success' => false,
@@ -168,6 +170,26 @@ try {
             // Notification metadata must not change reset success.
         }
     }
+} catch (OtpApiFirestoreConflictException) {
+    try {
+        $recheck = otp_api_validate_reset_authorization($resetToken);
+
+        if (!($recheck['valid'] ?? false)) {
+            otp_api_json_response(400, [
+                'success' => false,
+                'code' => 'INVALID_OR_EXPIRED_RESET_TOKEN',
+                'message' => 'This password reset authorization is invalid, expired, or already used.',
+            ]);
+        }
+    } catch (Throwable) {
+        // Fall through to the retry response below.
+    }
+
+    otp_api_json_response(409, [
+        'success' => false,
+        'code' => 'RECOVERY_RETRY_REQUIRED',
+        'message' => 'The recovery state changed while your password was being updated. Please try again.',
+    ]);
 } catch (Throwable) {
     otp_api_json_response(503, [
         'success' => false,
