@@ -115,3 +115,31 @@ Optional recovery mail branding:
 - `SENIOR_RECOVERY_FROM_NAME`
 
 Server secrets must never be committed or shipped to Angular.
+
+## OTP-10 hardening
+
+The versioned recovery API adds failure-path and abuse protections without
+changing the legacy OTP endpoints:
+
+- JSON-only POST requests with an 8 KiB request-body cap
+- generic public errors with provider/server details kept private
+- per-account issuance serialization through `password_reset_locks`
+- Firestore update-time preconditions for concurrent OTP verification
+- atomic resend supersession so the old OTP becomes unusable before the new OTP
+  becomes active
+- terminal challenge states scrub OTP/reset-token hashes
+- stale PENDING and VERIFIED challenges are expired and scrubbed when revisited
+- new challenges include `cleanup_after_epoch` for a seven-day Firestore TTL
+  retention policy
+- exact rolling `Retry-After` calculation for account/source throttles
+- the fifth failed OTP attempt locks the challenge and removes its OTP hash
+- reset-token expiry/reuse remain terminal and one-way
+- password completion uses Firestore preconditions and returns a retry response
+  if account/challenge state changes concurrently
+- request responses use a small randomized minimum delay to reduce simple
+  account-enumeration timing differences
+- optional proxy-aware source fingerprints are controlled by
+  `OTP_RECOVERY_TRUST_PROXY_HEADERS`
+
+Only enable trusted proxy headers when the hosting reverse proxy sanitizes or
+overwrites `X-Forwarded-For`.
