@@ -19,9 +19,11 @@ Versioned endpoints:
 - `POST /v1/password-reset/verify.php`
 - `POST /v1/password-reset/complete.php`
 
-### OTP-6 state
+### Frozen v1 state (OTP-12)
 
-The complete password-recovery backend flow is active.
+The complete password-recovery backend flow is active and frozen for final deployment/live testing.
+
+See `docs/OTP12_RECOVERY_API_FREEZE.md` for the authoritative API, security, deployment, and test contract.
 
 `complete.php` accepts:
 
@@ -129,8 +131,8 @@ changing the legacy OTP endpoints:
   becomes active
 - terminal challenge states scrub OTP/reset-token hashes
 - stale PENDING and VERIFIED challenges are expired and scrubbed when revisited
-- new challenges include `cleanup_after_epoch` for a seven-day Firestore TTL
-  retention policy
+- new challenges include `cleanup_after_epoch` as a seven-day retention marker;
+  it is an integer and is not directly usable as a Firestore TTL timestamp field
 - exact rolling `Retry-After` calculation for account/source throttles
 - the fifth failed OTP attempt locks the challenge and removes its OTP hash
 - reset-token expiry/reuse remain terminal and one-way
