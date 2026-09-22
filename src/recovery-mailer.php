@@ -66,8 +66,8 @@ function otp_api_send_recovery_otp(
 
     try {
         $sender = otp_api_recovery_sender();
-        $sendgrid = new \\SendGrid($apiKey);
-        $message = new \\SendGrid\\Mail\\Mail();
+        $sendgrid = new \SendGrid($apiKey);
+        $message = new \SendGrid\Mail\Mail();
 
         $message->setFrom($sender['email'], $sender['name']);
         $message->setSubject(
@@ -174,8 +174,8 @@ function otp_api_send_password_changed_notice(
 
     try {
         $sender = otp_api_recovery_sender();
-        $sendgrid = new \\SendGrid($apiKey);
-        $message = new \\SendGrid\\Mail\\Mail();
+        $sendgrid = new \SendGrid($apiKey);
+        $message = new \SendGrid\Mail\Mail();
 
         $message->setFrom($sender['email'], $sender['name']);
         $message->setSubject(
