@@ -40,7 +40,8 @@ OTP-11 CI verifies that these protected legacy files remain unchanged from
 
 The legacy Codetology mail behavior and legacy request/response contracts are
 outside the Senior E-Services recovery implementation and must remain
-compatible.
+compatible. The legacy mail endpoint remains on SendGrid; this OTP-12 live fix
+changes only the Senior E-Services recovery transport to Brevo.
 
 ## 2. Fixed server-side account mapping
 
@@ -294,7 +295,7 @@ If password completion loses a concurrent state race, the API returns
 
 OTP email:
 
-- SendGrid delivery
+- Brevo delivery
 - server-resolved registered account email only
 - subject: `Senior Citizen Information System - Password Recovery Code`
 - plain-text and HTML bodies
@@ -318,7 +319,7 @@ Required for Senior E-Services recovery:
 - `FIREBASE_SERVICE_ACCOUNT_JSON` **or**
   `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`
 - `OTP_RECOVERY_PEPPER`
-- `SENDGRID_API_KEY`
+- `BREVO_API_KEY`
 
 The Firestore target project is explicitly configured and does not come from
 the service-account JSON. This prevents an old or unrelated credential from
@@ -340,8 +341,8 @@ Proxy source handling:
 - set true only when the deployment reverse proxy is trusted to sanitize or
   overwrite `X-Forwarded-For`
 
-Never commit Firebase service-account JSON, SendGrid keys, or the recovery
-pepper.
+Never commit Firebase service-account JSON, Brevo API keys, legacy SendGrid
+keys, or the recovery pepper.
 
 ## 13. CORS and public errors
 
@@ -392,7 +393,7 @@ Before live recovery testing:
    Senior, LGU, and Super Admin frontends. Do not use `*` for the v1 API.
 4. Confirm the Firebase service account can read the three account collections
    and create/update the two recovery collections.
-5. Confirm SendGrid sender identity is verified.
+5. Confirm the Brevo sender identity is verified.
 6. Keep `OTP_RECOVERY_TRUST_PROXY_HEADERS=false` unless the proxy forwarding
    model has been verified.
 7. Confirm client Firestore rules do not expose recovery challenge/lock records.
@@ -437,7 +438,7 @@ Also test:
 - resend before 60 seconds
 - resend after 60 seconds
 - account/source rate limits
-- SendGrid delivery failure
+- Brevo delivery failure
 - concurrent recovery requests
 - concurrent completion request
 - legacy external consumer request/verify flow

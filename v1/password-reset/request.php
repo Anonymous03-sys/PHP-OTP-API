@@ -136,6 +136,9 @@ if (
         'success' => (bool) ($delivery['success'] ?? false),
         'status_code' => (int) ($delivery['status_code'] ?? 0),
         'reason' => (string) ($delivery['reason'] ?? 'UNKNOWN'),
+        'provider' => 'BREVO',
+        'provider_message' => $delivery['provider_message'] ?? null,
+        'provider_message_id' => $delivery['message_id'] ?? null,
     ], JSON_UNESCAPED_SLASHES));
 
     try {
@@ -143,7 +146,7 @@ if (
             'delivery_status' => $delivery['success']
                 ? 'SENT'
                 : 'FAILED',
-            'delivery_provider' => 'SENDGRID',
+            'delivery_provider' => 'BREVO',
             'delivery_status_code' => (int) (
                 $delivery['status_code'] ?? 0
             ),

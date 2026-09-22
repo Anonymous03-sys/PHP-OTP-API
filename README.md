@@ -9,7 +9,7 @@ The existing endpoints remain backward compatible:
 - `GET /index.php?email=...&school_id=...`
 - `GET /verify.php?email=...&otp=...`
 
-Their request/response contract and Codetology mail behavior remain unchanged.
+Their request/response contract and Codetology mail behavior remain unchanged. The legacy sender still uses SendGrid and may still require `SENDGRID_API_KEY` while that external consumer remains active.
 
 ## Senior E-Services recovery API
 
@@ -109,7 +109,7 @@ Required:
   `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`
 - `OTP_RECOVERY_PEPPER`
 - `OTP_RECOVERY_ALLOWED_ORIGINS`
-- `SENDGRID_API_KEY`
+- `BREVO_API_KEY`
 
 Optional recovery mail branding:
 
