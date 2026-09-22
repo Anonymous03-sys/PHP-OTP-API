@@ -314,10 +314,20 @@ Unknown/ineligible/decoy challenges never send recovery email.
 Required for Senior E-Services recovery:
 
 - `OTP_RECOVERY_ALLOWED_ORIGINS`
+- `FIREBASE_PROJECT_ID=ojt-app-3cebb-3ac5a`
 - `FIREBASE_SERVICE_ACCOUNT_JSON` **or**
   `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64`
 - `OTP_RECOVERY_PEPPER`
 - `SENDGRID_API_KEY`
+
+The Firestore target project is explicitly configured and does not come from
+the service-account JSON. This prevents an old or unrelated credential from
+silently redirecting recovery queries to the wrong Firebase project.
+
+The service account should normally be created in
+`ojt-app-3cebb-3ac5a`. If a credential from another Google Cloud project is
+used instead, it must have IAM permission to access Firestore in
+`ojt-app-3cebb-3ac5a`.
 
 Optional branding:
 
