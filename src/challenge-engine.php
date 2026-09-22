@@ -51,29 +51,22 @@ function otp_api_account_key(string $portal, string $identifier): string
 function otp_api_request_source_identity(): string
 {
     $remoteAddress = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+
+    if (filter_var($remoteAddress, FILTER_VALIDATE_IP)) {
+        return $remoteAddress;
+    }
+
     $forwarded = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
 
     if ($forwarded !== '') {
         $firstForwarded = trim(explode(',', $forwarded)[0] ?? '');
 
         if (filter_var($firstForwarded, FILTER_VALIDATE_IP)) {
-            $forwarded = $firstForwarded;
-        } else {
-            $forwarded = '';
+            return $firstForwarded;
         }
     }
 
-    if (!filter_var($remoteAddress, FILTER_VALIDATE_IP)) {
-        $remoteAddress = '';
-    }
-
-    $identity = $remoteAddress . '|' . $forwarded;
-
-    if ($identity === '|') {
-        $identity = 'unknown-source';
-    }
-
-    return $identity;
+    return 'unknown-source';
 }
 
 function otp_api_source_key(): string
