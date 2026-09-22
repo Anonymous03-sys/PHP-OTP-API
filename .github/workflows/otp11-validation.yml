@@ -1,0 +1,54 @@
+name: OTP-11 PHP Recovery Validation
+
+on:
+  push:
+    branches:
+      - dev-ai
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev branch with main history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish
+
+      - name: PHP syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            php -l "$file"
+          done < <(find . -type f -name '*.php' -not -path './vendor/*' -print0)
+
+      - name: Verify legacy files unchanged from main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main
+          git diff --exit-code origin/main --             index.php             verify.php             Dockerfile             composer.json             composer.lock
+
+      - name: Verify protected legacy API signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "\$email = \$_GET['email'] ?? '';" index.php
+          grep -Fq "\$school_id = \$_GET['school_id'] ?? '';" index.php
+          grep -Fq "\$email = \$_GET['email'] ?? '';" verify.php
+          grep -Fq "\$enteredOtp = \$_GET['otp'] ?? '';" verify.php
