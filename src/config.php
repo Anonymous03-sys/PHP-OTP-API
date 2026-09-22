@@ -44,6 +44,9 @@ function otp_api_config(): array
         'service' => 'php-otp-api',
         'api_version' => 'v1',
         'allowed_origins' => $allowedOrigins,
+        'firebase_project_id' => trim((string) (
+            getenv('FIREBASE_PROJECT_ID') ?: 'ojt-app-3cebb-3ac5a'
+        )),
         'challenge_collection' => 'password_reset_challenges',
         'challenge_lock_collection' => 'password_reset_locks',
         'challenge_retention_seconds' => 604800,
@@ -76,4 +79,20 @@ function otp_api_recovery_pepper(): string
     }
 
     return $pepper;
+}
+
+
+function otp_api_firebase_project_id(): string
+{
+    $projectId = trim((string) (
+        otp_api_config()['firebase_project_id'] ?? ''
+    ));
+
+    if ($projectId === '') {
+        throw new RuntimeException(
+            'Firebase target project is not configured.'
+        );
+    }
+
+    return $projectId;
 }
