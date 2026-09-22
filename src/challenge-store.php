@@ -63,3 +63,16 @@ function otp_api_find_source_challenges(string $sourceKey): array
 {
     return otp_api_find_challenges_by_key('source_key', $sourceKey);
 }
+
+function otp_api_challenge_lock_collection(): string
+{
+    return (string) otp_api_config()['challenge_lock_collection'];
+}
+
+function otp_api_get_challenge_lock(string $accountKey): ?array
+{
+    return otp_api_firestore_get_document(
+        otp_api_challenge_lock_collection(),
+        $accountKey
+    );
+}
