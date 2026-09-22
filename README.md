@@ -134,8 +134,9 @@ changing the legacy OTP endpoints:
 - exact rolling `Retry-After` calculation for account/source throttles
 - the fifth failed OTP attempt locks the challenge and removes its OTP hash
 - reset-token expiry/reuse remain terminal and one-way
-- password completion uses Firestore preconditions and returns a retry response
-  if account/challenge state changes concurrently
+- password completion uses Firestore preconditions and the same per-account
+  issuance lock, then returns a retry response if account/challenge state changes
+  concurrently
 - request responses use a small randomized minimum delay to reduce simple
   account-enumeration timing differences
 - optional proxy-aware source fingerprints are controlled by
