@@ -132,7 +132,7 @@ function otp_api_firebase_access_token(): string
         'https://oauth2.googleapis.com/token',
         ['Content-Type: application/x-www-form-urlencoded'],
         http_build_query([
-            'grant_type' => 'urn:ietf:params:oauth2:grant-type:jwt-bearer',
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
             'assertion' => $assertion,
         ], '', '&', PHP_QUERY_RFC3986)
     );
