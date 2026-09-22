@@ -58,7 +58,7 @@ requirement.
 One Firestore commit updates all core security state:
 
 - existing password field -> new plain string
-- `currentSessionId -> null`
+- `currentSessionId -> fresh server-generated recovery invalidation token`
 - current challenge `state -> COMPLETED`
 - current `otp_hash -> null`
 - current `reset_token_hash -> null`
@@ -71,7 +71,9 @@ Firestore update-time preconditions are included when available so concurrent
 changes cause the commit to fail rather than silently overwriting newer state.
 
 Existing signed-in sessions are invalidated through the same
-`currentSessionId` mechanism already used by the three applications.
+`currentSessionId` mechanism already used by the three applications. The reset
+writes a non-empty random token because the current app listeners log out when
+the remote token is present and differs from their local session token.
 
 After the atomic reset succeeds, a separate password-changed informational
 email is sent to the account's registered email. Notification failure does not
