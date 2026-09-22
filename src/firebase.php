@@ -573,6 +573,38 @@ function otp_api_firestore_commit_writes(array $writes): array
         $body
     );
 
+    if ($response['status'] < 200 || $response['status'] >= 300) {
+        $canonicalStatus = '';
+
+        try {
+            $errorPayload = json_decode(
+                $response['body'],
+                true,
+                512,
+                JSON_THROW_ON_ERROR
+            );
+
+            $canonicalStatus = strtoupper(trim((string) (
+                $errorPayload['error']['status'] ?? ''
+            )));
+        } catch (Throwable) {
+            $canonicalStatus = '';
+        }
+
+        if (
+            in_array((int) $response['status'], [409, 412], true) ||
+            in_array(
+                $canonicalStatus,
+                ['ABORTED', 'ALREADY_EXISTS', 'FAILED_PRECONDITION'],
+                true
+            )
+        ) {
+            throw new OtpApiFirestoreConflictException(
+                'Firestore atomic update conflicted.'
+            );
+        }
+    }
+
     return otp_api_firestore_decode_json_response(
         $response,
         'Firestore atomic update failed.'
