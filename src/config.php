@@ -27,6 +27,7 @@ function otp_api_config(): array
     // the allowlist to wildcard CORS.
     $trustedHostedOrigins = [
         'https://seniors-e-services-system.onrender.com',
+        'https://lgusenior-e-services-system.onrender.com',
     ];
 
     // Explicit development origins are safe to keep predictable and avoid
