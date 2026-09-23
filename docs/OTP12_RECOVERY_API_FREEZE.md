@@ -24,10 +24,16 @@ Legacy API, preserved for the existing external consumer:
 
 Senior E-Services recovery API:
 
+- `GET /v1/password-reset/health.php`
 - `POST /v1/password-reset/request.php`
 - `POST /v1/password-reset/verify.php`
 - `POST /v1/password-reset/complete.php`
 - `GET /health.php`
+
+The recovery-specific health endpoint is intentionally side-effect free. Clients
+may call it before an OTP request to wake an idle free-hosted service without
+creating a challenge, sending mail, consuming a resend window, or incrementing
+recovery request rate limits.
 
 OTP-11 CI verifies that these protected legacy files remain unchanged from
 `main`:
