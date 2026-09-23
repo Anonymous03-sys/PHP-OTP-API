@@ -17,18 +17,33 @@ function otp_api_json_response(int $status, array $payload): never
 function otp_api_apply_cors(array $allowedOrigins, array $allowedMethods): void
 {
     $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+    $originAllowed = $origin === ''
+        || in_array($origin, $allowedOrigins, true);
 
     header('Vary: Origin');
     header('Access-Control-Allow-Headers: Content-Type');
     header('Access-Control-Allow-Methods: ' . implode(', ', $allowedMethods));
 
-    if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+    if ($origin !== '') {
+        // Approved origins receive the normal CORS response. A disallowed
+        // origin receives only a readable rejection response; no recovery
+        // operation is permitted to continue.
         header('Access-Control-Allow-Origin: ' . $origin);
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
         http_response_code(204);
         exit;
+    }
+
+    if (!$originAllowed) {
+        error_log('[OTP Recovery] blocked browser origin: ' . $origin);
+
+        otp_api_json_response(403, [
+            'success' => false,
+            'code' => 'RECOVERY_ORIGIN_NOT_ALLOWED',
+            'message' => 'This hosted portal is not authorized to use account recovery.',
+        ]);
     }
 }
 
