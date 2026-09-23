@@ -22,6 +22,13 @@ function otp_api_config(): array
         explode(',', $allowedOriginsValue)
     )));
 
+    // Explicit trusted hosted origins are kept narrow and exact. Runtime
+    // configuration can still add other deployed portals without weakening
+    // the allowlist to wildcard CORS.
+    $trustedHostedOrigins = [
+        'https://seniors-e-services-system.onrender.com',
+    ];
+
     // Explicit development origins are safe to keep predictable and avoid
     // requiring a Render environment edit for local Ionic testing.
     $localDevelopmentOrigins = [
@@ -43,6 +50,7 @@ function otp_api_config(): array
     ];
 
     $allowedOrigins = array_values(array_unique(array_merge(
+        $trustedHostedOrigins,
         $localDevelopmentOrigins,
         $configuredOrigins
     )));
