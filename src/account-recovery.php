@@ -122,10 +122,40 @@ function otp_api_resolve_lgu_account_status(array $document): string
     return 'ACTIVE';
 }
 
+function otp_api_is_archived_recovery_account(
+    array $document
+): bool {
+    $value = otp_api_firestore_field(
+        $document,
+        'is_archived',
+        false
+    );
+
+    if ($value === true) {
+        return true;
+    }
+
+    if ($value === false || $value === null) {
+        return false;
+    }
+
+    $normalized = strtoupper(trim((string) $value));
+
+    return in_array(
+        $normalized,
+        ['TRUE', 'YES', '1', 'ARCHIVED'],
+        true
+    );
+}
+
 function otp_api_is_recovery_eligible(
     string $eligibilityRule,
     array $document
 ): bool {
+    if (otp_api_is_archived_recovery_account($document)) {
+        return false;
+    }
+
     return match ($eligibilityRule) {
         'senior' => otp_api_is_senior_recovery_eligible($document),
         'lgu' => otp_api_resolve_lgu_account_status($document) === 'ACTIVE',
